@@ -189,7 +189,7 @@ if [ "$MODE" = "deploy" ]; then
     npm run build
     
     echo "Deploying to Cloudflare Pages..."
-    npx wrangler pages deploy .output/public --project-name "$PROJECT_NAME" --branch main --commit-dirty=true
+    npx wrangler pages deploy dist --project-name "$PROJECT_NAME" --branch main --commit-dirty=true
     
     print_header "Deployment Complete!"
     echo -e "  ${GREEN}Your app is being deployed to Cloudflare Pages.${NC}"
@@ -422,7 +422,7 @@ if [ "$MODE" = "no-deploy" ]; then
     echo ""
     echo -e "  ${CYAN}To deploy manually:${NC}"
     echo -e "    ${BOLD}npm run build${NC}"
-    echo -e "    ${BOLD}npx wrangler pages deploy .output/public --project-name $PROJECT_NAME${NC}"
+    echo -e "    ${BOLD}npx wrangler pages deploy dist --project-name $PROJECT_NAME${NC}"
     echo ""
     echo -e "  ${CYAN}Or use the script:${NC}"
     echo -e "    ${BOLD}./install.sh --deploy${NC}"
@@ -445,7 +445,7 @@ fi
 
 echo ""
 echo "Deploying to Cloudflare Pages..."
-if npx wrangler pages deploy .output/public --project-name "$PROJECT_NAME" --branch main --commit-dirty=true; then
+if npx wrangler pages deploy dist --project-name "$PROJECT_NAME" --branch main --commit-dirty=true; then
     print_success "Deployment initiated"
 else
     print_error "Deployment failed"
