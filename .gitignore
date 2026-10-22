@@ -28,3 +28,7 @@ logs
 
 # Wrangler config (contains production IDs)
 wrangler.toml
+
+.env
+wrangler.toml
+*.bak

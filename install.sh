@@ -330,35 +330,31 @@ print_success "D1 Database ready (ID: ${DB_ID:0:8}...)"
 echo ""
 echo "Setting up KV Namespace '$KV_NAME'..."
 
-# Check if KV exists, create if not
-KV_EXISTS=$(npx wrangler kv:namespace list --json 2>/dev/null | node -e "
-    const data = require('fs').readFileSync(0, 'utf8');
-    try {
-        const kvs = JSON.parse(data);
-        const exists = kvs.some(k => k.title === '$KV_NAME');
-        console.log(exists ? 'true' : 'false');
-    } catch(e) { console.log('false'); }
-" 2>/dev/null || echo "false")
+# Busca por sufixo, porque o wrangler prefixa o título com o name do wrangler.toml
+find_kv_id() {
+    npx wrangler kv namespace list 2>/dev/null | node -e "
+        const data = require('fs').readFileSync(0, 'utf8');
+        try {
+            const kvs = JSON.parse(data);
+            const kv = kvs.find(k => k.title === '$KV_NAME' || k.title.endsWith('-$KV_NAME'));
+            if (kv) console.log(kv.id);
+        } catch (e) {}
+    "
+}
 
-if [ "$KV_EXISTS" = "false" ]; then
+KV_ID=$(find_kv_id)
+
+if [ -z "$KV_ID" ]; then
     echo "Creating KV namespace..."
-    npx wrangler kv:namespace create "$KV_NAME" 2>/dev/null || true
-    sleep 2  # Wait for propagation
+    # Sem 2>/dev/null: se falhar, o erro real precisa aparecer
+    npx wrangler kv namespace create "$KV_NAME" || true
+    sleep 2
+    KV_ID=$(find_kv_id)
 fi
-
-# Get the KV ID
-KV_ID=$(npx wrangler kv:namespace list --json 2>/dev/null | node -e "
-    const data = require('fs').readFileSync(0, 'utf8');
-    try {
-        const kvs = JSON.parse(data);
-        const kv = kvs.find(k => k.title === '$KV_NAME');
-        if(kv) console.log(kv.id);
-    } catch(e) {}
-" 2>/dev/null)
 
 if [ -z "$KV_ID" ]; then
     print_error "Could not retrieve KV Namespace ID"
-    echo -e "  ${YELLOW}Try creating it manually: npx wrangler kv:namespace create $KV_NAME${NC}"
+    echo -e "  ${YELLOW}Run 'npx wrangler kv namespace list' and check the output${NC}"
     exit 1
 fi
 print_success "KV Namespace ready (ID: ${KV_ID:0:8}...)"
@@ -367,18 +363,32 @@ print_success "KV Namespace ready (ID: ${KV_ID:0:8}...)"
 echo ""
 echo "Updating wrangler.toml..."
 
-# Backup existing file
+# Cria o wrangler.toml a partir do exemplo, se ainda não existir
+if [ ! -f wrangler.toml ]; then
+    if [ -f wrangler.toml.example ]; then
+        cp wrangler.toml.example wrangler.toml
+        print_info "wrangler.toml created from wrangler.toml.example"
+    else
+        print_error "wrangler.toml and wrangler.toml.example not found"
+        exit 1
+    fi
+fi
+
 cp wrangler.toml wrangler.toml.bak
 
-# Update Database ID (cross-platform compatible)
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    sed -i '' "s/database_id = \".*\"/database_id = \"$DB_ID\"/" wrangler.toml
-    # Update KV ID (find the line under [[kv_namespaces]] section)
-    sed -i '' "/^\[\[kv_namespaces\]\]/,/^id = / s/^id = \".*\"/id = \"$KV_ID\"/" wrangler.toml
-else
-    sed -i "s/database_id = \".*\"/database_id = \"$DB_ID\"/" wrangler.toml
-    sed -i "/^\[\[kv_namespaces\]\]/,/^id = / s/^id = \".*\"/id = \"$KV_ID\"/" wrangler.toml
-fi
+# Alinha o name com o projeto do Pages
+sed_inplace() {
+    if [[ "$OSTYPE" == "darwin"* ]]; then sed -i '' "$@"; else sed -i "$@"; fi
+}
+
+sed_inplace "s/^name = \".*\"/name = \"$PROJECT_NAME\"/" wrangler.toml
+
+# Descomenta o bloco do KV (as 3 linhas) se ainda estiver comentado
+sed_inplace '/^# \[\[kv_namespaces\]\]/,/^# id = /{s/^# //}' wrangler.toml
+
+# Grava os IDs
+sed_inplace "s/^database_id = \".*\"/database_id = \"$DB_ID\"/" wrangler.toml
+sed_inplace "/^\[\[kv_namespaces\]\]/,/^id = / s/^id = \".*\"/id = \"$KV_ID\"/" wrangler.toml
 
 print_success "wrangler.toml updated (backup saved as wrangler.toml.bak)"
 
